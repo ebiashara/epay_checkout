@@ -21,8 +21,8 @@ export const PaymentComponent = () => {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [amount, setAmount] = useState<number>(1);
-  const [txFee, setTxFee] = useState<number>(0.0);
+  const [amount] = useState<number>(1);
+  const [txFee] = useState<number>(0.0);
 
   const toast = useToast();
 
@@ -84,8 +84,8 @@ export const PaymentComponent = () => {
         AccountNumber: accountNumber,
         NetworkCode: networkCode,
         MobileNumber: phoneNumber,
-        Narration: 'Pay for Gift',
-        AccountReference: accountReference,
+        Narration: 'C2B payment transaction',
+        AccountReference: accountReference, // Generate UUID Hex value as Reference
         CountryCode: '254',
         CurrencyCode: 'KES',
         Amount: amount,
@@ -103,8 +103,8 @@ export const PaymentComponent = () => {
           body: JSON.stringify(payload),
         });
 
-        const paymentResponseData = paymentResponse.json();
-        console.log(`Payment response data: ${paymentResponseData}`);
+        // const paymentResponseData = paymentResponse.json();
+        // console.log(`Payment response data: ${paymentResponseData}`);
 
         if (!paymentResponse.ok) {
           setIsLoading(false);
@@ -114,7 +114,7 @@ export const PaymentComponent = () => {
           //   isClosable: true,
           // });
           throw new Error(
-            paymentResponseData.message || 'Failed to process payment!',
+            'Failed to process payment!',
           );
         } else {
           toast({
@@ -143,60 +143,48 @@ export const PaymentComponent = () => {
     ],
   );
 
-  const handleCardPayment = useCallback(async (ev: React.FormEvent) => {
+  const handleCardPayment = useCallback(
+    async (ev: React.FormEvent) => {
+      ev.preventDefault();
+      const token = localStorage.getItem('token');
 
-    ev.preventDefault();
-    const token = localStorage.getItem('token');
+      const payload = {
+        network_code: networkCode,
+        phone: '0703291347',
+        account_number: accountNumber,
+        currency: 'kes',
+        amount: amount,
+        description: 'payment',
+        callback_url: callbackUrl,
+      };
 
-    const payload = {
-      network_code: networkCode,
-      phone: phoneNumber,
-      account_number: accountNumber,
-      currency: 'kes',
-      amount: amount,
-      description: 'payment',
-      callback_url: callbackUrl
-    };
-
-    try {
-      const cardPaymentResponse = await fetch(
-        `${baseUrl}/transactions/card-c2b/`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+      try {
+        const cardPaymentResponse = await fetch(
+          `${baseUrl}/transactions/card-c2b/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
           },
-          body: JSON.stringify(payload),
-        },
-      );
+        );
 
-      const cardPaymentResponseData = cardPaymentResponse.json()
-      console.log(`Card payment response data: ${cardPaymentResponseData}`);
+        const cardPaymentResponseData = cardPaymentResponse.json();
+        console.log(`Card payment response data: ${cardPaymentResponseData}`);
 
-      if (!cardPaymentResponse) {
-        throw new Error('Failed to process card payment');
+        if (!cardPaymentResponse) {
+          throw new Error('Failed to process card payment');
+        }
+
+        localStorage.removeItem('token');
+      } catch (err) {
+        console.error(err);
       }
-
-      localStorage.removeItem('token');
-    } catch (err) {
-      console.error(err);
-    }
-  },
-  [accountNumber, amount, baseUrl, callbackUrl, networkCode, phoneNumber]
-);
-
-  const animatePaymentCard = () => {
-    // Functionality for animating Card payment
-  };
-
-  const validateMpesaInput = () => {
-    // Functionality for validating Mpesa input
-  };
-
-  const validateCardInput = () => {
-    // Functionality for validating Card input
-  };
+    },
+    [accountNumber, amount, baseUrl, callbackUrl, networkCode],
+  );
 
   return (
     <Container justifyContent='center' alignContent='center' height='100vh'>
@@ -303,7 +291,7 @@ export const PaymentComponent = () => {
                     {isLoading ? (
                       <React.Fragment>
                         <Input
-                          type='password'
+                          type='number'
                           placeholder='Card Number'
                           onChange={(ev) => ev.currentTarget.value}
                           required
