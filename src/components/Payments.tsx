@@ -2,7 +2,6 @@ import React, { useCallback } from 'react';
 import { useState } from 'react';
 import {
   Container,
-  Heading,
   Box,
   Flex,
   Image,
@@ -14,36 +13,44 @@ import {
   InputLeftAddon,
   useToast,
   Spinner,
+  VStack,
+  Icon,
+  HStack,
+  Select,
+  CardFooter,
 } from '@chakra-ui/react';
+import { FaMobileAlt } from 'react-icons/fa';
+import { AiOutlineMobile } from 'react-icons/ai';
+import { FaCreditCard } from 'react-icons/fa6';
 
 export const PaymentComponent = () => {
-  const [showMpesaDetails, setShowMpesaDetails] = useState(false);
   const [showCardDetails, setShowCardDetails] = useState(false);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState<string>('');
   const [amount] = useState<number>(1);
   const [txFee] = useState<number>(0.0);
+  const [cardNumber, setCardNumber] = useState<string>('');
+  const [cardName, setCardName] = useState<string>('');
+  const [cardExpiryDate, setCardExpiryDate] = useState<string>('');
+  const [cardCvv, setCardCvv] = useState<string>('');
 
   const toast = useToast();
 
   const baseUrl = import.meta.env.VITE_API_BASE_URL;
   const clientId = import.meta.env.VITE_CLIENT_ID;
   const clientSecret =
-    'pbkdf2_sha256$390000$43P68pHRD5iBux7wfg1JkV$b6Ry45SFHEswmJ8cNwqgDfMRKXoyJw8OPeoSxrehbZY=';
+    'pbkdf2_sha256$390000$NZ8uAWmCEOJrz5NAGhnHxk$I4vweW50Q1IOEBKeUJryl9yFqnGlQPX//euZmXJGDFI=';
   const accountNumber = import.meta.env.VITE_ACCOUNT_NUMBER;
-  const networkCode = import.meta.env.VITE_NETWORK_CODE;
   const accountReference = import.meta.env.VITE_ACCOUNT_REFERENCE;
   const callbackUrl = import.meta.env.VITE_CALLBACK_URL;
 
   const toggleMpesa = () => {
-    setShowMpesaDetails(true);
     setShowCardDetails(false);
     retrieveToken();
   };
 
   const toggleCard = () => {
     setShowCardDetails(true);
-    setShowMpesaDetails(false);
     retrieveToken();
   };
 
@@ -61,7 +68,6 @@ export const PaymentComponent = () => {
           client_secret: clientSecret,
         }),
       });
-      setIsLoading(true);
       const data = await response.json();
       console.log('Response data: ', data);
 
@@ -80,9 +86,11 @@ export const PaymentComponent = () => {
     async (ev: React.FormEvent) => {
       ev.preventDefault();
       const token = localStorage.getItem('token');
+      setIsLoading(true);
+
       const payload = {
         AccountNumber: accountNumber,
-        NetworkCode: networkCode,
+        NetworkCode: '63902',
         MobileNumber: phoneNumber,
         Narration: 'C2B payment transaction',
         AccountReference: accountReference, // Generate UUID Hex value as Reference
@@ -103,31 +111,36 @@ export const PaymentComponent = () => {
           body: JSON.stringify(payload),
         });
 
-        // const paymentResponseData = paymentResponse.json();
-        // console.log(`Payment response data: ${paymentResponseData}`);
+        const paymentResponseData = await paymentResponse.json();
+        console.log(
+          `Payment response data: ${JSON.stringify(paymentResponseData)}`,
+        );
 
         if (!paymentResponse.ok) {
-          setIsLoading(false);
-          // toast({
-          //   title: 'Error processing payment',
-          //   status: 'error',
-          //   isClosable: true,
-          // });
-          throw new Error(
-            'Failed to process payment!',
-          );
-        } else {
           toast({
-            title: 'Payment successful! 🚀',
+            title: paymentResponseData.message,
             status: 'error',
             isClosable: true,
           });
-          console.log('Success!');
+          localStorage.removeItem('checkout-request-id');
+          throw new Error('Failed to process payment!');
+        } else {
+          localStorage.setItem(
+            'checkout-request-id',
+            paymentResponseData.CheckoutRequestID,
+          );
+          toast({
+            title: `${paymentResponseData.message} 🚀`,
+            status: 'success',
+            isClosable: true,
+          });
         }
 
-        localStorage.removeItem('token');
+        setIsLoading(false);
       } catch (err) {
         console.error(err);
+      } finally {
+        setIsLoading(false);
       }
     },
     [
@@ -136,7 +149,6 @@ export const PaymentComponent = () => {
       amount,
       baseUrl,
       callbackUrl,
-      networkCode,
       phoneNumber,
       toast,
       txFee,
@@ -147,9 +159,11 @@ export const PaymentComponent = () => {
     async (ev: React.FormEvent) => {
       ev.preventDefault();
       const token = localStorage.getItem('token');
+      console.log(token);
+      setIsLoading(true);
 
       const payload = {
-        network_code: networkCode,
+        network_code: '62100',
         phone: '0703291347',
         account_number: accountNumber,
         currency: 'kes',
@@ -157,6 +171,9 @@ export const PaymentComponent = () => {
         description: 'payment',
         callback_url: callbackUrl,
       };
+
+      const delay = (ms: number) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
 
       try {
         const cardPaymentResponse = await fetch(
@@ -171,29 +188,116 @@ export const PaymentComponent = () => {
           },
         );
 
-        const cardPaymentResponseData = cardPaymentResponse.json();
-        console.log(`Card payment response data: ${cardPaymentResponseData}`);
+        const cardPaymentResponseData = await cardPaymentResponse.json();
+        console.log(
+          `Card payment response data: ${JSON.stringify(cardPaymentResponseData)}`,
+        );
 
         if (!cardPaymentResponse) {
+          toast({
+            title: cardPaymentResponseData.message,
+            status: 'error',
+            isClosable: true,
+          });
           throw new Error('Failed to process card payment');
+        } else {
+          toast({
+            title: `${cardPaymentResponseData.message}`,
+            status: 'success',
+            isClosable: true,
+          });
+        }
+
+        localStorage.setItem('card_number', cardNumber);
+        localStorage.setItem('card_name', cardName);
+        localStorage.setItem('card_expiry_date', cardExpiryDate);
+        localStorage.setItem('card_cvv', cardCvv);
+
+        const url = cardPaymentResponseData.url;
+        console.log(url);
+
+        await delay(5000);
+
+        const finalizeCardPaymentPayload = {
+          url,
+          cardNumber,
+          cardName,
+          cardExpiryDate,
+          cardCvv,
+        };
+
+        const finalizeCardPaymentResponse = await fetch(
+          `${baseUrl}/transactions/card-c2b-process/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(finalizeCardPaymentPayload),
+          },
+        );
+
+        const finalizeCardPaymentResponseData =
+          await finalizeCardPaymentResponse.json();
+        console.log(
+          `Finalize card payment response data: ${JSON.stringify(finalizeCardPaymentResponseData)}`,
+        );
+
+        if (!finalizeCardPaymentResponse.ok) {
+          toast({
+            title: finalizeCardPaymentResponseData.message,
+            status: 'error',
+            isClosable: true,
+          });
+          throw new Error('Failed to process payment');
+        } else {
+          toast({
+            title: finalizeCardPaymentResponseData.message,
+            status: 'success',
+            isClosable: true,
+          });
         }
 
         localStorage.removeItem('token');
+        setIsLoading(false);
       } catch (err) {
         console.error(err);
+      } finally {
+        setIsLoading(false);
       }
     },
-    [accountNumber, amount, baseUrl, callbackUrl, networkCode],
+    [
+      accountNumber,
+      amount,
+      baseUrl,
+      callbackUrl,
+      cardNumber,
+      cardName,
+      cardExpiryDate,
+      cardCvv,
+      toast,
+    ],
   );
 
   return (
-    <Container justifyContent='center' alignContent='center' height='100vh'>
-      <Heading color='#e94e1c' mb={6} textAlign='center'>
-        Select Payment Method
-      </Heading>
-      <Card borderRadius={12} width='68vh'>
+    <Container
+      justifyContent='center'
+      alignContent='center'
+      height='100vh'
+      maxW='88vh'
+    >
+      <Card
+        borderRadius={12}
+        width='100%'
+        maxWidth='1200px'
+        height='68%'
+        maxHeight='1200px'
+        p={6}
+        size='lg'
+      >
         <Flex flexDirection='column' gap={4}>
-          <Box>
+          <Flex justifyContent='start' alignItems='start'>
             <Image
               src='/Eb.png'
               alt='eBiashara Logo'
@@ -203,97 +307,130 @@ export const PaymentComponent = () => {
               ml={10}
               mt={12}
             />
-          </Box>
-          <Text fontSize='2xl' fontWeight='bold' align='center'>
+          </Flex>
+          <HStack spacing={36}>
+            <Text color='#e94e1c' fontWeight='bold' fontSize='lg' ml={10}>
+              SELECT A PAYMENT METHOD
+            </Text>
+            {/* <Text fontSize='2xl' fontWeight='bold' align='center'>
             Total Amount : KES 1.00
-          </Text>
+          </Text> */}
+
+            <HStack>
+              <Select variant='outline' placeholder='Kenya' size='sm' w='15vh'>
+                <option>Kenya</option>
+              </Select>
+              <Select
+                variant='outline'
+                placeholder='English'
+                size='sm'
+                w='15vh'
+              >
+                <option>English</option>
+                <option>Portugais</option>
+                <option>Francais</option>
+                <option>Arabic</option>
+              </Select>
+            </HStack>
+          </HStack>
 
           <hr
             style={{
-              width: '85%',
+              width: '88%',
               alignSelf: 'center',
               border: '1px solid black',
             }}
           />
-
           <Flex justifyContent='flex-start' alignItems='center' ml={8}>
-            <Box>
+            <VStack alignItems='flex-start'>
               <Flex
                 justifyContent='center'
                 alignItems='center'
-                flexDirection='column'
-                gap={4}
+                flexDirection='row'
+                gap={2}
               >
-                <Box
-                  onClick={toggleMpesa}
-                  justifyContent='center'
-                  alignItems='center'
-                >
-                  <Text textAlign='center'>Mpesa</Text>
-                  <Image mt={3} src='/phone.png' alt='MPESA Logo' />
-                </Box>
-                <Box style={{ flexGrow: 3 }}></Box>
-                <Box
-                  onClick={toggleCard}
-                  justifyContent='center'
-                  alignItems='center'
-                >
-                  <Image src='/creditcard.png' alt='Visa Logo' mb={3} />
-                  <Text textAlign='center'>Card</Text>
-                </Box>
-                <Box></Box>
+                <Icon as={AiOutlineMobile} boxSize={6} />
+                <Text textAlign='center' fontSize={18}>
+                  Mobile Money
+                </Text>
               </Flex>
-            </Box>
+              <Card w='58%' cursor='pointer' onClick={toggleMpesa}>
+                <Flex justifyContent='center'>
+                  <Image src='/mpesa.jpg' alt='MPESA Logo' height='8vh' width='10vh' />
+                </Flex>
+              </Card>
+              <Box style={{ flexGrow: 3 }}></Box>
+              <Flex
+                onClick={toggleCard}
+                justifyContent='center'
+                alignItems='center'
+                gap={3}
+              >
+                <Icon as={FaCreditCard} boxSize={5} />
+                <Text textAlign='center' fontSize={18}>
+                  Card
+                </Text>
+              </Flex>
+              <Card w='58%' cursor='pointer' onClick={toggleCard}>
+                <Flex w='30vh'>
+                  <Image src='/visa.png' alt='VISA Logo' w='30%' />
+                  <Image src='/mastercard.png' alt='Mastercard Logo' w='30%' />
+                </Flex>
+              </Card>
+              <Box></Box>
+            </VStack>
 
-            {showMpesaDetails && (
-              <Box m='auto'>
-                <form onSubmit={handlePayment}>
-                  {isLoading ? (
-                    <React.Fragment>
-                      <InputGroup>
-                        <InputLeftAddon bg='gray.900' color='#FFF'>
-                          +254
-                        </InputLeftAddon>
-                        <Input
-                          type='text'
-                          placeholder='7xxxxxxxx'
-                          onChange={(ev) =>
-                            setPhoneNumber(ev.currentTarget.value)
-                          }
-                          value={phoneNumber}
-                          mb={3}
-                          focusBorderColor='green.500'
-                        />
-                      </InputGroup>
-                      <Button
-                        type='submit'
-                        disabled={isLoading}
-                        width='100%'
-                        bg='#e94e1c'
-                        _hover={{
-                          bg: '#e94e1c',
-                        }}
-                      >
-                        {isLoading ? 'Pay Now' : <Spinner />}
-                      </Button>
-                    </React.Fragment>
-                  ) : (
-                    <Spinner />
-                  )}
+            <Box m='auto'>
+              {!showCardDetails ? (
+                <form onSubmit={handlePayment} style={{ width: '36vh' }}>
+                  <React.Fragment>
+                    <InputGroup>
+                      <InputLeftAddon bg='gray.900' color='#FFF'>
+                        +254
+                      </InputLeftAddon>
+                      <Input
+                        type='text'
+                        placeholder='7xxxxxxxx'
+                        onChange={(ev) =>
+                          setPhoneNumber(ev.currentTarget.value)
+                        }
+                        value={phoneNumber}
+                        mb={3}
+                        focusBorderColor='green.500'
+                      />
+                    </InputGroup>
+                    <Button
+                      disabled={isLoading}
+                      type='submit'
+                      width='100%'
+                      bg='#e94e1c'
+                      _hover={{
+                        bg: '#e94e1c',
+                      }}
+                    >
+                      {isLoading ? (
+                        <Spinner color='green.500' />
+                      ) : (
+                        <Text color='#FFF'>Pay Now</Text>
+                      )}
+                    </Button>
+                  </React.Fragment>
                 </form>
-              </Box>
-            )}
-
-            {showCardDetails && (
-              <Box style={{ width: '70%', margin: 'auto' }}>
-                <Box m='auto'>
-                  <form onSubmit={handleCardPayment}>
-                    {isLoading ? (
+              ) : (
+                <Box style={{ margin: 'auto' }}>
+                  <Box m='auto'>
+                    <form
+                      onSubmit={handleCardPayment}
+                      style={{ width: '36vh' }}
+                    >
                       <React.Fragment>
                         <Input
                           type='number'
                           placeholder='Card Number'
-                          onChange={(ev) => ev.currentTarget.value}
+                          value={cardNumber}
+                          onChange={(ev) =>
+                            setCardNumber(ev.currentTarget.value)
+                          }
                           required
                           mb={3}
                           focusBorderColor='green.500'
@@ -301,7 +438,8 @@ export const PaymentComponent = () => {
                         <Input
                           type='text'
                           placeholder='Card Name'
-                          onChange={(ev) => ev.currentTarget.value}
+                          value={cardName}
+                          onChange={(ev) => setCardName(ev.currentTarget.value)}
                           required
                           mb={3}
                           focusBorderColor='green.500'
@@ -309,7 +447,10 @@ export const PaymentComponent = () => {
                         <Input
                           type='text'
                           placeholder='Card Expiry Date'
-                          onChange={(ev) => ev.currentTarget.value}
+                          value={cardExpiryDate}
+                          onChange={(ev) =>
+                            setCardExpiryDate(ev.currentTarget.value)
+                          }
                           required
                           mb={3}
                           focusBorderColor='green.500'
@@ -317,40 +458,41 @@ export const PaymentComponent = () => {
                         <Input
                           type='password'
                           placeholder='CVV'
-                          onChange={(ev) => ev.currentTarget.value}
+                          value={cardCvv}
+                          onChange={(ev) => setCardCvv(ev.currentTarget.value)}
                           required
                           mb={3}
                           focusBorderColor='green.500'
                         />
                         <Button
                           type='submit'
-                          className='pay-button-card'
-                          disabled
+                          disabled={isLoading}
                           width='100%'
                           bg='#e94e1c'
                           _hover={{
                             bg: '#e94e1c',
                           }}
                         >
-                          Pay Now
+                          {isLoading ? (
+                            <Spinner color='green.500' />
+                          ) : (
+                            <Text color='#FFF'>Pay Now</Text>
+                          )}
                         </Button>
                       </React.Fragment>
-                    ) : (
-                      <Spinner />
-                    )}
-                  </form>
+                    </form>
+                  </Box>
                 </Box>
-              </Box>
-            )}
+              )}
+            </Box>
           </Flex>
-
-          <footer>
-            <Flex justifyContent='center' alignItems='center'>
-              <Text>&copy; Powered by</Text>
-              <Image src='/logo.png' alt='eBiashara Logo' width='120px' />
-            </Flex>
-          </footer>
         </Flex>
+        <CardFooter margin='auto' mt={20}>
+          <Flex justifyContent='center' alignItems='center'>
+            <Text>&copy; Powered by</Text>
+            <Image src='/logo.png' alt='eBiashara Logo' width='120px' />
+          </Flex>
+        </CardFooter>
       </Card>
     </Container>
   );
